@@ -1,0 +1,29 @@
+name: blender
+channels:
+  - conda-forge
+#
+# We'll actualy run blender python scripts using blender's python
+#  So this is only for stuff run outside blender
+dependencies:
+# Basics
+  - python=3.11  # Matches blender 4.1
+  - cmocean=2.0
+  - parallel
+# Optional, code formatter
+  - black
+# Optional - documentation generator
+  - sphinx=7.3
+
+# Install blender as python module
+  - pip
+  - pip:
+    - bpy==4.1
+
+
+# Tell python to look for modules in the root directory of the project
+# (A hack, needs to be edited for every installation, but makes code
+#  management much easier.)
+# Replace with the path to your project directory root.
+
+variables:
+  PYTHONPATH: /Users/philip/Projects/blender_experiments
