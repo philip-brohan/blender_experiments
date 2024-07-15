@@ -1,0 +1,14 @@
+name: Foothills
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - rasterio=1.2
+  - matplotlib=3.5
+  - imagemagick=7.1
+  - cmocean
+# DEM data handling
+  - elevation=1.1.3
+# Optional, code formatter
+  - black
