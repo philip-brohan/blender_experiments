@@ -7,26 +7,18 @@ import numpy as np
 
 # These are both blender-specific libraries
 import bpy
-import mathutils
 
-# Set the render directory - this is where the rendered images will be saved
-bindir = None
-try:
-    bindir = os.path.abspath(os.path.dirname(__file__))
-except Exception as e:
-    pass
+from library.utilities import set_render_filename
+from library.constructors.meshes import new_grid
 
-if bindir is not None:
-    bpy.context.scene.render.filepath = os.path.join(bindir, "plane+ball_")
+# Script directory - to find the textures
+bindir = os.path.abspath(os.path.dirname(__file__))
 
-# Remove initial cube
-try:
-    cube = bpy.data.objects["Cube"]
-    bpy.data.objects.remove(cube, do_unlink=True)
-except:
-    print("Object bpy.data.objects['Cube'] not found")
+# Filename for the rendered image (will have '_000.png' appended)
+set_render_filename("Louisville", relative=True)
 
-bpy.ops.outliner.orphans_purge()
+# Clear the scene
+bpy.ops.wm.read_factory_settings(use_empty=True)
 
 # Were going to make a scene with 1x1 degrees of terrain
 horizontal_scale = 10.0  # m per degree at equator
@@ -60,21 +52,14 @@ view_height = terrain_np[
 ]
 
 # Make a plane to be the terrain
-bpy.ops.mesh.primitive_grid_add(
-    x_subdivisions=polygons_per_degree,
-    y_subdivisions=polygons_per_degree,
-    size=horizontal_scale,
-    calc_uvs=True,
-    enter_editmode=False,
-    align="WORLD",
+terrain = new_grid(
     location=(0.0, 0.0, 0.0),
-    rotation=(0.0, 0.0, math.radians(90)),  # West is left
-    scale=(1.0, 1.0, 1.0),
+    size=horizontal_scale,
+    name="Terrain",
+    xres=polygons_per_degree,
+    yres=polygons_per_degree,
+    rotation=(0.0, 0.0, math.radians(90)),  # West is left,
 )
-current_name = bpy.context.selected_objects[0].name
-terrain = bpy.data.objects[current_name]
-terrain.name = "Terrain"
-terrain.data.name = terrain.name + "_mesh"
 # Scale from geographic projecvtion to (approximately) actual shape
 terrain.scale.x = math.cos(math.radians(view_lat))
 
@@ -164,7 +149,7 @@ terrain_col[:, :, 2] = np.random.random((terrain_col.shape[0], terrain_col.shape
 #    terrain_col.shape[1],
 # )
 # terrain_col_tx.pixels[:] = terrain_col.flatten()
-terrain_col_tx = bpy.data.images.load("%s/20CRv3_E-grid.png" % bindir)
+terrain_col_tx = bpy.data.images.load("%s/textures/20CRv3_E-grid.png" % bindir)
 
 # terrain_col_tx.update()
 # Then use the texture in a material
@@ -221,3 +206,36 @@ backdrop.data.name = backdrop.name + "_mesh"
 # Wider in y because of wide angle camera
 backdrop.scale.x = 6
 backdrop.scale.y = 0.75
+# add a backdrop image
+backdrop_tx = bpy.data.images.load(
+    "%s/textures/Farragut-DD-348-1942-01-0021.jpg" % bindir
+)
+bpy.data.materials.new("Backdrop")
+backdrop_material = bpy.data.materials["Backdrop"]
+backdrop_material.name = "Backdrop"
+backdrop_material.diffuse_color = (0.5, 0.5, 0.5, 1.0)
+backdrop_material.use_nodes = True
+backdrop_material.node_tree.nodes["Principled BSDF"].inputs[
+    "Roughness"
+].default_value = 0.5
+backdrop_material.node_tree.nodes["Principled BSDF"].inputs[
+    "Metallic"
+].default_value = 0.0
+backdrop_mapping_node = backdrop_material.node_tree.nodes.new(type="ShaderNodeMapping")
+backdrop_mapping_node.inputs["Rotation"].default_value[2] = math.pi * 0.5
+backdrop_tex_coord_node = backdrop_material.node_tree.nodes.new(
+    type="ShaderNodeTexCoord"
+)
+backdrop_texture_node = backdrop_material.node_tree.nodes.new(type="ShaderNodeTexImage")
+backdrop_texture_node.image = backdrop_tx
+backdrop_material.node_tree.links.new(
+    backdrop_tex_coord_node.outputs["UV"], backdrop_mapping_node.inputs["Vector"]
+)
+backdrop_material.node_tree.links.new(
+    backdrop_mapping_node.outputs["Vector"], backdrop_texture_node.inputs["Vector"]
+)
+backdrop_material.node_tree.links.new(
+    backdrop_texture_node.outputs["Color"],
+    backdrop_material.node_tree.nodes["Principled BSDF"].inputs["Base Color"],
+)
+backdrop.data.materials.append(backdrop_material)
