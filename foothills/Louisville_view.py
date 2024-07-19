@@ -7,9 +7,11 @@ import numpy as np
 
 # These are both blender-specific libraries
 import bpy
+import mathutils
 
 from library.utilities import set_render_filename
 from library.constructors.meshes import new_grid
+from library.constructors.cameras import new_camera, set_viewpoint
 
 # Script directory - to find the textures
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -70,21 +72,19 @@ for poly in terrain.data.polygons:
 # Move the camera to the viewpoint outside Louisville
 camera_lon_fraction = (view_lat - lat_range[0]) / (lat_range[1] - lat_range[0])
 camera_lat_fraction = (view_lon - lon_range[0]) / (lon_range[1] - lon_range[0])
-bpy.data.objects["Camera"].location = (
+camera_location = (
     horizontal_scale * (camera_lon_fraction - 0.5) * terrain.scale.x,
     horizontal_scale * (camera_lat_fraction - 0.5),
     view_height * vertical_scale + view_height_above_ground,
 )
-# Point the camera due west
-bpy.data.objects["Camera"].rotation_mode = "XYZ"
-bpy.data.objects["Camera"].rotation_euler = view_direction
-
-# Set the camera lens - this is the focal length in mm
-# Very small value (for wide angle image)
-bpy.data.objects["Camera"].data.lens = 5.0
+camera = new_camera(camera_location, view_direction, "Camera", lens=5.0, active=True)
 # Set the camera image aspect ratio - wide and short
-bpy.context.scene.render.resolution_x = 4000
-bpy.context.scene.render.resolution_y = 500
+# bpy.context.scene.render.resolution_x = 4000
+# bpy.context.scene.render.resolution_y = 500
+
+# Set the viewpoint in the 3D Viewport
+# Doesn't work properly. Have not figured out why not.
+# set_viewpoint((0, 2, 2), view_direction)
 
 
 # Add a displace modifier to the terrain for the mountains
@@ -199,7 +199,7 @@ bpy.ops.mesh.primitive_plane_add(
     rotation=(math.pi * 2 - view_direction[0], 0, 0),  # Perpendicular to camera angle
     scale=(1.0, 1.0, 1.0),
 )
-current_name = bpy.context.selected_objects[0].name
+current_name = bpy.context.view_layer.objects.selected[0].name
 backdrop = bpy.data.objects[current_name]
 backdrop.name = "Backdrop"
 backdrop.data.name = backdrop.name + "_mesh"
