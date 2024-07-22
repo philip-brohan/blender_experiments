@@ -38,8 +38,8 @@ def new_camera(
     camera.data.name = name + "_camera"
     camera.data.type = type
     camera.data.lens = lens
-    # camera.data.sensor_width = sensor_width
-    # camera.data.sensor_height = sensor_height
+    camera.data.sensor_width = sensor_width
+    camera.data.sensor_height = sensor_height
     if active:
         bpy.context.scene.camera = camera
     return camera

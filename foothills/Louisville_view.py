@@ -12,6 +12,7 @@ import mathutils
 from library.utilities import set_render_filename
 from library.constructors.meshes import new_grid
 from library.constructors.cameras import new_camera, set_viewpoint
+from library.constructors.images import make_image_from_numpy, make_numpy_from_image
 
 # Script directory - to find the textures
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -37,9 +38,8 @@ view_direction = (math.radians(104), 0, math.radians(180))
 lat_range = (39.5, 40.5)
 lon_range = (-106.0, -105.0)
 # Load the terrain as an image texture
-terrain_tx = bpy.data.images.load("%s/get_DEM/Boulder.tif" % bindir)
-terrain_np = np.array(terrain_tx.pixels[:])
-terrain_np = terrain_np.reshape((terrain_tx.size[1], terrain_tx.size[0], 4))  # units?
+terrain_img = bpy.data.images.load("%s/get_DEM/Boulder.tif" % bindir)
+terrain_np = make_numpy_from_image(terrain_img)
 # Get height at the viewpoint
 view_lat_fraction = (view_lat - lat_range[0]) / (lat_range[1] - lat_range[0])
 view_lon_fraction = (view_lon - lon_range[0]) / (lon_range[1] - lon_range[0])
@@ -96,7 +96,7 @@ displace_modifier.mid_level = 0.0
 displace_modifier.texture_coords = "UV"
 displace_modifier.texture = bpy.data.textures.new(name="Displacement", type="IMAGE")
 displace_modifier.texture.extension = "EXTEND"
-displace_modifier.texture.image = terrain_tx
+displace_modifier.texture.image = terrain_img
 
 # Calculate the curvature of the Earth down from the viewpoint
 # Add it to the terrain as a second displace modifier
@@ -110,23 +110,9 @@ dropoff = 6371 - np.sqrt(6371**2 - distance**2)  # km
 dropoff = np.maximum(0, dropoff)
 dropoff = dropoff / 233.000  # Empirical scale km to terrain units
 dropoff = dropoff.T  # Transpose to match Blender's UV coordinates
-# Need dropoff to have 0-1 range so it works as a texture
-# But preserve the scale for the displace modifier
 dropoff_scale = np.max(dropoff)
-# Convert from scalar to RGB
-dropoff /= np.max(dropoff)
-dropoff = np.stack((dropoff, dropoff, dropoff), axis=2)
-alpha = np.ones((polygons_per_degree, polygons_per_degree))
-dropoff = np.dstack((dropoff, alpha))
-# Convert from numpy to texture
-dropoff = dropoff.flatten()
-dropoff_tx = bpy.data.images.new(
-    "Dropoff",
-    polygons_per_degree,
-    polygons_per_degree,
-)
-dropoff_tx.pixels[:] = dropoff
-dropoff_tx.update()
+dropoff_img = make_image_from_numpy(dropoff, name="Dropoff", rescale=True)
+dropoff_img.update()
 # Add the dropoff texture as a displace modifier
 displace_modifier = terrain.modifiers.new(name="Dropoff", type="DISPLACE")
 displace_modifier.strength = -vertical_scale * dropoff_scale
@@ -135,21 +121,10 @@ displace_modifier.mid_level = 0.0
 displace_modifier.texture_coords = "UV"
 displace_modifier.texture = bpy.data.textures.new(name="Dropoff", type="IMAGE")
 displace_modifier.texture.extension = "EXTEND"
-displace_modifier.texture.image = dropoff_tx
+displace_modifier.texture.image = dropoff_img
 
-# Colour the terrain - first create an array of RGBA values
-terrain_col = terrain_np.copy()  # already in RGBA format
-terrain_col[:, :, 0] = np.random.random((terrain_col.shape[0], terrain_col.shape[1]))
-terrain_col[:, :, 1] = np.random.random((terrain_col.shape[0], terrain_col.shape[1]))
-terrain_col[:, :, 2] = np.random.random((terrain_col.shape[0], terrain_col.shape[1]))
-# Then convert the array into a texture
-# terrain_col_tx = bpy.data.images.new(
-#    "Dropoff",
-#    terrain_col.shape[0],
-#    terrain_col.shape[1],
-# )
-# terrain_col_tx.pixels[:] = terrain_col.flatten()
-terrain_col_tx = bpy.data.images.load("%s/textures/20CRv3_E-grid.png" % bindir)
+# Colour the terrain
+terrain_col_img = bpy.data.images.load("%s/textures/20CRv3_E-grid.png" % bindir)
 
 # terrain_col_tx.update()
 # Then use the texture in a material
@@ -171,7 +146,7 @@ mapping_node.inputs["Rotation"].default_value[2] = math.pi * 0
 # Create a Texture Coordinate node
 tex_coord_node = terrain_material.node_tree.nodes.new(type="ShaderNodeTexCoord")
 texture_node = terrain_material.node_tree.nodes.new(type="ShaderNodeTexImage")
-texture_node.image = terrain_col_tx
+texture_node.image = terrain_col_img
 terrain_material.node_tree.links.new(
     tex_coord_node.outputs["UV"], mapping_node.inputs["Vector"]
 )
@@ -239,3 +214,27 @@ backdrop_material.node_tree.links.new(
     backdrop_material.node_tree.nodes["Principled BSDF"].inputs["Base Color"],
 )
 backdrop.data.materials.append(backdrop_material)
+
+# Add sky lighting
+bpy.context.scene.world = bpy.data.worlds.new("Sky")
+bpy.context.scene.world.use_nodes = True
+world_nodes = bpy.context.scene.world.node_tree.nodes
+world_links = bpy.context.scene.world.node_tree.links
+
+# Clear existing nodes to start fresh
+world_nodes.clear()
+
+# Create a new Sky Texture node
+sky_texture_node = world_nodes.new(type="ShaderNodeTexSky")
+
+# Create a Background node
+background_node = world_nodes.new(type="ShaderNodeBackground")
+
+# Create an Output node (World Output)
+output_node = world_nodes.new(type="ShaderNodeOutputWorld")
+
+# Link Sky Texture node to Background node
+world_links.new(sky_texture_node.outputs["Color"], background_node.inputs["Color"])
+
+# Link Background node to World Output node
+world_links.new(background_node.outputs["Background"], output_node.inputs["Surface"])
